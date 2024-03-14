@@ -19,7 +19,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="..\..\c-em-env\icon\em.png">
+    <None Include="..\icon\em.png">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>
