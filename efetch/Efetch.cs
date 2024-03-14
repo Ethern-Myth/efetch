@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Polly;
 using System.Text;
 using System.Text.Json;
 
@@ -12,6 +13,13 @@ namespace efetch
     {
         public string BaseUrl { get; set; } = "";
         public Dictionary<string, string> DefaultHeaders { get; set; } = new Dictionary<string, string>();
+
+        // Polly retry policy configuration
+
+        // Default retry count
+        public int RetryCount { get; set; } = 3; 
+        // Default retry interval calculation
+        public Func<int, TimeSpan> RetryInterval { get; set; } = retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)); 
     }
 
     /// <summary>
@@ -22,6 +30,7 @@ namespace efetch
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly EfetchConfig _config;
         private readonly ILoggingProvider _loggingProvider;
+        private readonly IAsyncPolicy<HttpResponseMessage> _retryPolicy;
         public string BaseUrl => _config.BaseUrl;
 
         /// <summary>
@@ -41,6 +50,11 @@ namespace efetch
             {
                 httpClient.DefaultRequestHeaders.Add(header.Key, header.Value);
             }
+
+            // Configure Polly retry policy using EfetchConfig settings
+            _retryPolicy = Policy<HttpResponseMessage>.Handle<HttpRequestException>()
+                           .OrResult(msg => msg.StatusCode == System.Net.HttpStatusCode.NotFound)
+                           .WaitAndRetryAsync(_config.RetryCount, _config.RetryInterval);
         }
 
         /// <summary>
@@ -48,7 +62,7 @@ namespace efetch
         /// </summary>
         public static Efetch InstanceConfig(EfetchConfig? efetchConfig = null, ILoggingProvider? loggingProvider = null)
         {
-            if(loggingProvider == null)
+            if (loggingProvider == null)
             {
                 loggingProvider = ConsoleLoggingProvider.Instance;
             }
@@ -115,20 +129,18 @@ namespace efetch
             {
                 using (var httpClient = _httpClientFactory.CreateClient())
                 {
-                    using (var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken))
-                    {
-                        // Read the response content
-                        var responseData = await response.Content.ReadAsStringAsync();
+                    var response = await _retryPolicy.ExecuteAsync(() => httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken));
+                    // Read the response content
+                    var responseData = await response.Content.ReadAsStringAsync();
 
-                        // Ensure the request was successful
-                        response.EnsureSuccessStatusCode();
+                    // Ensure the request was successful
+                    response.EnsureSuccessStatusCode();
 
-                        // Log the response
-                        _loggingProvider?.LogResponse(response);
+                    // Log the response
+                    _loggingProvider?.LogResponse(response);
 
-                        // Deserialize the response data
-                        return JsonSerializer.Deserialize<T>(responseData)!;
-                    }
+                    // Deserialize the response data
+                    return JsonSerializer.Deserialize<T>(responseData)!;
                 }
             }
             catch (HttpRequestException ex)

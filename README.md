@@ -125,7 +125,9 @@ var config = new EfetchConfig
     {
         { "Authorization", "Bearer your_access_token" },
         { "Accept", "application/json" }
-    }
+    },
+    RetryCount = 5,
+    RetryInterval = retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt))
 };
 
 var efetch = Efetch.InstanceConfig(config);
@@ -140,8 +142,7 @@ var response = await efetch.PostAsync<ResponseModel, RequestBody>("/endpoint", r
 
 In this example:
 
-- We first create an instance of `Efetch` without any logging.
-- Then, we create another instance of `Efetch` with console logging enabled by passing `ConsoleLoggingProvider.Instance` to the `InstanceWithLoggingProvider` method.
+- We first create an instance of `Efetch` without any logging, default is set for us.
 - We perform a GET request using the first client instance and display the result.
 - We perform a POST request using the second client instance with console logging and display the result.
 - Similarly, other HTTP operations like PUT, PATCH, and DELETE can be performed using their respective methods.
@@ -153,153 +154,3 @@ In this example:
 ### License
 
 This project is licensed under the [MIT License](https://opensource.org/licenses/MIT).
-
----------------------------------------------------------------------------------------
-
-Sure, here's how you can update the README.md file with the latest change:
-
----
-
-# efetch
-
-efetch is a lightweight library for making HTTP requests and logging. It provides an easy-to-use interface for sending HTTP requests asynchronously and handling responses.
-
-## Usage
-
-### Installation
-
-You can install efetch via NuGet Package Manager Console:
-
-```bash
-Install-Package efetch
-```
-
-Or via .NET CLI:
-
-```bash
-dotnet add package efetch
-```
-
-### Integration with ASP.NET Core
-
-You can integrate efetch with ASP.NET Core in your `Program.cs` file:
-
-```csharp
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-
-namespace YourNamespace
-{
-    public class Program
-    {
-        public static void Main(string[] args)
-        {
-            var builder = WebApplication.CreateBuilder(args);
-
-            // Configure services
-            builder.Services.AddSingleton<EfetchConfig>(new EfetchConfig
-            {
-                BaseUrl = "https://api.example.com",
-                DefaultHeaders = new Dictionary<string, string>
-                {
-                    { "Authorization", "Bearer your_access_token" },
-                    { "Accept", "application/json" }
-                }
-            });
-            // Add other services...
-
-            var app = builder.Build();
-
-            // Pass the configured IServiceCollection to InstanceConfig method
-            var efetchInstance = Efetch.InstanceConfig(builder.Services);
-
-            // Run the application
-            app.Run();
-        }
-    }
-}
-```
-
-In this configuration, ensure you replace `"https://api.example.com"` and `"your_access_token"` with your actual API base URL and access token respectively.
-
-### Making Requests
-
-Create an instance of `Efetch` using the configuration:
-
-```csharp
-var efetch = Efetch.InstanceConfig(config);
-```
-
-Now you can make HTTP requests using the provided methods:
-
-```csharp
-// GET request
-var responseData = await efetch.GetAsync<ResponseModel>("/endpoint");
-
-// POST request
-var response = await efetch.PostAsync<ResponseModel, RequestBody>("/endpoint", requestBody);
-
-// PUT request
-var response = await efetch.PutAsync<ResponseModel, RequestBody>("/endpoint", requestBody);
-
-// PATCH request
-var response = await efetch.PatchAsync<ResponseModel, RequestBody>("/endpoint", requestBody);
-
-// DELETE request
-var response = await efetch.DeleteAsync<ResponseModel>("/endpoint");
-```
-
-### Logging
-
-efetch supports logging requests and responses. You can provide your own logging provider by implementing the `ILoggingProvider` interface.
-
-```csharp
-public class MyLoggingProvider : ILoggingProvider
-{
-    public void LogRequest(HttpRequestMessage request)
-    {
-        // Implement logging logic for request
-    }
-
-    public void LogResponse(HttpResponseMessage response)
-    {
-        // Implement logging logic for response
-    }
-
-    public void LogError(Exception ex)
-    {
-        // Implement logging logic for errors
-    }
-}
-```
-
-### Examples
-
-```csharp
-var config = new EfetchConfig
-{
-    BaseUrl = "https://api.example.com",
-    DefaultHeaders = new Dictionary<string, string>
-    {
-        { "Authorization", "Bearer your_access_token" },
-        { "Accept", "application/json" }
-    }
-};
-
-var efetch = Efetch.InstanceConfig(config);
-
-// GET request example
-var responseData = await efetch.GetAsync<ResponseModel>("/endpoint");
-
-// POST request example
-var requestBody = new RequestBody { /* request body properties */ };
-var response = await efetch.PostAsync<ResponseModel, RequestBody>("/endpoint", requestBody);
-```
-
----
-
-This README provides a brief overview of efetch, covering its installation, configuration, integration with ASP.NET Core, usage, logging, and examples. For more detailed information, please refer to the code documentation or visit the [official documentation](https://github.com/your_repository).
-
-Feel free to contribute, report issues, or suggest improvements by [opening an issue](https://github.com/your_repository/issues) or [creating a pull request](https://github.com/your_repository/pulls).
