@@ -1,102 +1,46 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using efetch.Configurations;
+using efetch.Policies;
+using efetch.Providers;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Polly;
+using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 
-namespace efetch
+namespace efetch.Services
 {
-    /// <summary>
-    /// Represents configuration properties for the Efetch class.
-    /// </summary>
-    public class EfetchConfig
-    {
-        public string BaseUrl { get; set; } = "";
-        public Dictionary<string, string> DefaultHeaders { get; set; } = new Dictionary<string, string>();
-
-        // Polly retry policy configuration
-
-        // Default retry count
-        public int RetryCount { get; set; } = 3; 
-        // Default retry interval calculation
-        public Func<int, TimeSpan> RetryInterval { get; set; } = retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)); 
-    }
-
-    /// <summary>
-    /// Provides methods for making HTTP requests and logging.
-    /// </summary>
     public class Efetch : IEfetch
     {
-        private readonly IHttpClientFactory _httpClientFactory;
         private readonly EfetchConfig _config;
-        private readonly ILoggingProvider _loggingProvider;
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IConsoleLoggingProvider _loggingProvider;
         private readonly IAsyncPolicy<HttpResponseMessage> _retryPolicy;
-        public string BaseUrl => _config.BaseUrl;
 
-        /// <summary>
-        /// Initializes a new instance of the Efetch class with the specified configuration.
-        /// </summary>
-        private Efetch(IHttpClientFactory httpClientFactory, EfetchConfig config, ILoggingProvider? loggingProvider = null)
+        public Efetch(IHttpClientFactory httpClientFactory, IOptions<EfetchConfig> configOptions, IConsoleLoggingProvider loggingProvider)
         {
-            _config = config ?? throw new ArgumentNullException(nameof(config));
-            _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
-            _loggingProvider = loggingProvider!;
+            _config = configOptions?.Value ?? throw new ArgumentNullException(nameof(configOptions));
 
-            // Create HttpClient instance through IHttpClientFactory
-            var httpClient = _httpClientFactory.CreateClient();
+            _httpClientFactory = httpClientFactory;
 
-            // Set default headers for the HttpClient instance
+            var httpClientFactoryWithOptions = httpClientFactory;
+
+            _loggingProvider = loggingProvider;
+
+            var httpClient = httpClientFactoryWithOptions.CreateClient();
+
             foreach (var header in _config.DefaultHeaders)
             {
-                httpClient.DefaultRequestHeaders.Add(header.Key, header.Value);
+                if (!string.IsNullOrWhiteSpace(header.Key) && !string.IsNullOrWhiteSpace(header.Value))
+                {
+                    httpClient.DefaultRequestHeaders.Add(header.Key, header.Value);
+                }
             }
 
             // Configure Polly retry policy using EfetchConfig settings
             _retryPolicy = Policy<HttpResponseMessage>.Handle<HttpRequestException>()
                            .OrResult(msg => msg.StatusCode == System.Net.HttpStatusCode.NotFound)
                            .WaitAndRetryAsync(_config.RetryCount, _config.RetryInterval);
-        }
-
-        /// <summary>
-        /// Creates an instance of Efetch with the specified configuration.
-        /// </summary>
-        public static Efetch InstanceConfig(EfetchConfig? efetchConfig = null, ILoggingProvider? loggingProvider = null)
-        {
-            if (loggingProvider == null)
-            {
-                loggingProvider = ConsoleLoggingProvider.Instance;
-            }
-            // Set up service collection for dependency injection
-            var serviceProvider = new ServiceCollection()
-                                        .AddHttpClient()
-                                        .BuildServiceProvider();
-            // Get the HttpClientFactory service
-            var httpClientFactory = serviceProvider.GetRequiredService<IHttpClientFactory>();
-            return new Efetch(httpClientFactory, efetchConfig!, loggingProvider);
-        }
-
-        /// <summary>
-        /// Creates an instance of Efetch with the specified configuration and services.
-        /// </summary>
-        public static Efetch InstanceConfig(IServiceCollection? services = null, ILoggingProvider? loggingProvider = null)
-        {
-            if (loggingProvider == null)
-            {
-                loggingProvider = ConsoleLoggingProvider.Instance;
-            }
-
-            // Set up service collection for dependency injection with options
-            var serviceProviderWithOptions = services!
-                                            .AddHttpClient()
-                                            .AddOptions()
-                                            .BuildServiceProvider();
-
-            // Get the EfetchConfig options from the service provider
-            var options = serviceProviderWithOptions.GetRequiredService<IOptions<EfetchConfig>>();
-            var httpClientFactoryWithOptions = serviceProviderWithOptions.GetRequiredService<IHttpClientFactory>();
-
-            // Create and return a new instance of Efetch
-            return new Efetch(httpClientFactoryWithOptions, options.Value, loggingProvider);
         }
 
         /// <summary>
@@ -115,7 +59,6 @@ namespace efetch
                 }
             }
 
-            // Log the request
             _loggingProvider?.LogRequest(request);
             return request;
         }
@@ -130,28 +73,46 @@ namespace efetch
                 using (var httpClient = _httpClientFactory.CreateClient())
                 {
                     var response = await _retryPolicy.ExecuteAsync(() => httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken));
-                    // Read the response content
+
                     var responseData = await response.Content.ReadAsStringAsync();
 
-                    // Ensure the request was successful
                     response.EnsureSuccessStatusCode();
 
-                    // Log the response
                     _loggingProvider?.LogResponse(response);
 
-                    // Deserialize the response data
-                    return JsonSerializer.Deserialize<T>(responseData)!;
+                    try
+                    {
+                        if (typeof(T) == typeof(string))
+                        {
+                            return (T)(object)responseData;
+                        }
+                        else if (typeof(T) == typeof(object))
+                        {
+                            return (T)(object)responseData;
+                        }
+
+                        var result = JsonSerializer.Deserialize<T>(responseData, new JsonSerializerOptions
+                        {
+                            PropertyNameCaseInsensitive = true
+                        });
+
+                        return result!;
+                    }
+                    catch (JsonException ex)
+                    {
+                        _loggingProvider?.LogError(ex);
+                        throw;
+                    }
                 }
             }
             catch (HttpRequestException ex)
             {
-                // Log any exceptions
                 _loggingProvider?.LogError(ex);
                 throw;
             }
         }
         /// <inheritdoc/>
-        public async Task<T> GetAsync<T>(string endpointUrl, Dictionary<string, string>? headers = null, Dictionary<string, string>? queryParams = null, CancellationToken cancellationToken = default, dynamic? id = null)
+        public async Task<T> GetAsync<T>(string endpointUrl, dynamic? id = null, Dictionary<string, string>? queryParams = null, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
         {
             string url = CombineUrls(endpointUrl, id, queryParams);
             var request = PrepareRequest(HttpMethod.Get, url, null, headers!);
@@ -159,9 +120,9 @@ namespace efetch
         }
 
         /// <inheritdoc/>
-        public async Task<T> PostAsync<T, TBody>(string endpointUrl, TBody body, Dictionary<string, string>? headers = null, Dictionary<string, string>? queryParams = null, CancellationToken cancellationToken = default)
+        public async Task<T> PostAsync<T, TBody>(string endpointUrl, TBody? body, dynamic? id = null, Dictionary<string, string>? queryParams = null, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
         {
-            string url = CombineUrls(endpointUrl);
+            string url = CombineUrls(endpointUrl, id, queryParams);
             var jsonBody = JsonSerializer.Serialize(body, new JsonSerializerOptions
             {
                 PropertyNamingPolicy = new LowercaseNamingPolicy(),
@@ -172,7 +133,7 @@ namespace efetch
         }
 
         /// <inheritdoc/>
-        public async Task<T> PutAsync<T, TBody>(string endpointUrl, TBody body, Dictionary<string, string>? headers = null, Dictionary<string, string>? queryParams = null, CancellationToken cancellationToken = default, dynamic? id = null)
+        public async Task<T> PutAsync<T, TBody>(string endpointUrl, TBody? body, dynamic? id = null, Dictionary<string, string>? queryParams = null, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
         {
             string url = CombineUrls(endpointUrl, id, queryParams);
             var jsonBody = JsonSerializer.Serialize(body, new JsonSerializerOptions
@@ -185,7 +146,7 @@ namespace efetch
         }
 
         /// <inheritdoc/>
-        public async Task<T> PatchAsync<T, TBody>(string endpointUrl, TBody body, Dictionary<string, string>? headers = null, Dictionary<string, string>? queryParams = null, CancellationToken cancellationToken = default, dynamic? id = null)
+        public async Task<T> PatchAsync<T, TBody>(string endpointUrl, TBody? body, dynamic? id = null, Dictionary<string, string>? queryParams = null, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
         {
             string url = CombineUrls(endpointUrl, id, queryParams);
             var jsonBody = JsonSerializer.Serialize(body, new JsonSerializerOptions
@@ -198,7 +159,7 @@ namespace efetch
         }
 
         /// <inheritdoc/>
-        public async Task<T> DeleteAsync<T>(string endpointUrl, Dictionary<string, string>? headers = null, Dictionary<string, string>? queryParams = null, CancellationToken cancellationToken = default, dynamic? id = null)
+        public async Task<T> DeleteAsync<T>(string endpointUrl, dynamic? id = null, Dictionary<string, string>? queryParams = null, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
         {
             string url = CombineUrls(endpointUrl, id, queryParams);
             var request = PrepareRequest(HttpMethod.Delete, url, null, headers!);

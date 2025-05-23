@@ -1,6 +1,6 @@
-﻿namespace efetch
+﻿namespace efetch.Providers
 {
-    public interface ILoggingProvider
+    public interface IConsoleLoggingProvider
     {
         void LogRequest(HttpRequestMessage request);
         void LogResponse(HttpResponseMessage response);

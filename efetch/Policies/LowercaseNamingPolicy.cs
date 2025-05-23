@@ -1,6 +1,6 @@
 ﻿using System.Text.Json;
 
-namespace efetch
+namespace efetch.Policies
 {
     public class LowercaseNamingPolicy : JsonNamingPolicy
     {

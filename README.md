@@ -1,16 +1,16 @@
 # efetch
 
-**efetch** is a lightweight C# library for making HTTP requests with ease. It provides a simple interface for performing common HTTP operations such as GET, POST, PUT, PATCH, and DELETE. It also supports custom logging for requests, responses, and errors.
+**efetch** is a lightweight C# library for performing resilient HTTP requests with minimal boilerplate. It supports GET, POST, PUT, PATCH, DELETE operations, built-in retry policies via Polly, customizable headers, and optional structured logging.
 
 ![NuGet Version](https://img.shields.io/nuget/v/efetch)
-
 ![GitHub Tag](https://img.shields.io/github/v/tag/ethern-myth/efetch)
-
 ![NuGet Downloads](https://img.shields.io/nuget/dt/efetch)
 
-### Installation
+---
 
-You can install **efetch** via NuGet Package Manager Console:
+## 🚀 Installation
+
+Install via NuGet Package Manager:
 
 ```bash
 Install-Package efetch
@@ -22,135 +22,142 @@ Or via .NET CLI:
 dotnet add package efetch
 ```
 
-### Features
+---
 
-- Simple and intuitive API for making HTTP requests.
-- Support for GET, POST, PUT, PATCH, and DELETE operations.
-- Ability to customize default headers for requests.
-- Support for query parameters.
-- Lightweight and easy to integrate into existing projects.
+## ✨ Features
 
-### API
+- ✅ Clean abstraction with `IEfetch` interface
+- 🔁 Retry support using Polly
+- 📦 JSON deserialization with support for primitives, objects, and arrays
+- 📡 Simple query parameter handling
+- 📓 Optional request/response logging
+- 🧩 Built-in support for dependency injection
 
-#### `IEFetchClient`
+---
 
-- `Task<T> GetAsync<T>(string endpointUrl, Dictionary<string, string>? headers = null, Dictionary<string, string>? queryParams = null, CancellationToken cancellationToken = default, dynamic? id = null)`: Performs a GET request.
-- `Task<T> PostAsync<T, TBody>(string endpointUrl, TBody body, Dictionary<string, string>? headers = null, Dictionary<string, string>? queryParams = null, CancellationToken cancellationToken = default)`: Performs a POST request.
-- `Task<T> PutAsync<T, TBody>(string endpointUrl, TBody body, Dictionary<string, string>? headers = null, Dictionary<string, string>? queryParams = null, CancellationToken cancellationToken = default, dynamic? id = null)`: Performs a PUT request.
-- `Task<T> PatchAsync<T, TBody>(string endpointUrl, TBody body, Dictionary<string, string>? headers = null, Dictionary<string, string>? queryParams = null, CancellationToken cancellationToken = default, dynamic? id = null)`: Performs a PATCH request.
-- `Task<T> DeleteAsync<T>(string endpointUrl, Dictionary<string, string>? headers = null, Dictionary<string, string>? queryParams = null, CancellationToken cancellationToken = default, dynamic? id = null)`: Performs a DELETE request.
+## 🧩 Configuration
 
-#### `ILoggingProvider`
+Add to your app's `appsettings.json`:
 
-- `void LogRequest(HttpRequestMessage request)`: Logs the HTTP request.
-- `void LogResponse(HttpResponseMessage response)`: Logs the HTTP response.
-- `void LogError(Exception exception)`: Logs errors that occur during HTTP requests.
-
-### Configuration
-
-To use **efetch**, first configure the `EfetchConfig` class with the desired base URL and default headers.
-
-```csharp
-var config = new EfetchConfig
-{
-    BaseUrl = "https://api.example.com",
-    DefaultHeaders = new Dictionary<string, string>
-    {
-        { "Authorization", "Bearer your_access_token" },
-        { "Accept", "application/json" }
-    }
-};
+```json
+"Efetch": {
+  "BaseUrl": "https://api.example.com",
+  "DefaultHeaders": {
+    "Authorization": "Bearer YOUR_TOKEN",
+    "Accept": "application/json"
+  },
+  "RetryCount": 3
+}
 ```
 
-### Usage
-
-You can integrate **efetch** with .NET Core in your `Program.cs` or just .cs file like the example below:
+Register `Efetch` in your DI container (`Program.cs`):
 
 ```csharp
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using efetch;
+builder.Services.AddEfetch(builder.Configuration);
+```
 
-namespace YourNamespace
+---
+
+## 🧪 Usage
+
+### Inject `IEfetch`:
+
+```csharp
+public class VaultController : ControllerBase
 {
-    public class Program
+    private readonly IEfetch _efetch;
+
+    public VaultController(IEfetch efetch)
     {
-        public static void Main(string[] args)
-        {
-            var builder = WebApplication.CreateBuilder(args);
+        _efetch = efetch;
+    }
 
-            // Configure services
-            builder.Services.AddSingleton<EfetchConfig>(new EfetchConfig
-            {
-                BaseUrl = "https://api.example.com",
-                DefaultHeaders = new Dictionary<string, string>
-                {
-                    { "Authorization", "Bearer your_access_token" },
-                    { "Accept", "application/json" }
-                }
-            });
-            // Add other services...
-
-            var app = builder.Build();
-
-            // Pass the configured IServiceCollection to InstanceConfig method
-            var efetchInstance = Efetch.InstanceConfig(builder.Services);
-
-            // Run the application
-            app.Run();
-        }
+    [HttpGet]
+    public async Task<IActionResult> Get([FromQuery] string key)
+    {
+        var result = await _efetch.GetAsync<object>("vault", null, new() { { "key", key } });
+        return Ok(result);
     }
 }
 ```
 
-On a .NET Core MVC
+---
+
+## 📦 Example
 
 ```csharp
-builder.Services.AddTransient<IEfetch, Efetch>();
-builder.Services.AddSingleton<EfetchConfig>(new EfetchConfig { BaseUrl = "http://127.0.0.1" });
+public class MyService
+{
+    private readonly IEfetch _efetch;
 
-// This is important when using Program.cs
-new EfetchConfig(builder.Services);
+    public MyService(IEfetch efetch)
+    {
+        _efetch = efetch;
+    }
+
+    public async Task RunAsync()
+    {
+        // GET example
+        var result = await _efetch.GetAsync<MyResponse>("/data");
+
+        // POST example
+        var body = new MyRequest { Name = "John" };
+        var response = await _efetch.PostAsync<MyResponse, MyRequest>("/create", body);
+
+        // String response example
+        var plainText = await _efetch.GetAsync<string>("/version");
+    }
+}
 ```
 
-### Example
+---
+
+## 🛠 API
+
+### `IEfetch`
+
+- `GetAsync<T>(...)`
+- `PostAsync<T, TBody>(...)`
+- `PutAsync<T, TBody>(...)`
+- `PatchAsync<T, TBody>(...)`
+- `DeleteAsync<T>(...)`
+
+All methods support:
+- Optional headers
+- Optional query parameters
+- Optional ID for REST-style routes
+- Built-in retry policy
+
+### `ILoggingProvider`
+
+Optionally implement your own logger or use the built-in `ConsoleLoggingProvider`.
+
+---
+
+## 🔧 Advanced: Manual Configuration
 
 ```csharp
-var config = new EfetchConfig
+builder.Services.AddSingleton(new EfetchConfig
 {
     BaseUrl = "https://api.example.com",
-    DefaultHeaders = new Dictionary<string, string>
+    DefaultHeaders = new()
     {
-        { "Authorization", "Bearer your_access_token" },
+        { "Authorization", "Bearer abc123" },
         { "Accept", "application/json" }
-    },
-    RetryCount = 5,
-    RetryInterval = retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt))
-};
+    }
+});
 
-var efetch = Efetch.InstanceConfig(config);
-
-// GET request example
-var responseData = await efetch.GetAsync<ResponseModel>("/endpoint");
-
-// POST request example
-var requestBody = new RequestBody { /* request body properties */ };
-var response = await efetch.PostAsync<ResponseModel, RequestBody>("/endpoint", requestBody);
+builder.Services.AddTransient<IEfetch, Efetch>();
 ```
 
-In this example:
+---
 
-- We first create an instance of `Efetch` without any logging, default is set for us.
-- We perform a GET request using the first client instance and display the result.
-- We perform a POST request using the second client instance with console logging and display the result.
-- Similarly, other HTTP operations like PUT, PATCH, and DELETE can be performed using their respective methods.
+## 👤 Author
 
-### Author
+**efetch** is created by [Ethern Myth](https://github.com/Ethern-Myth).
 
-**efetch** is developed and maintained by [Ethern Myth](https://github.com/Ethern-Myth).
+---
 
-### License
+## 📄 License
 
-This project is licensed under the [MIT License](https://opensource.org/licenses/MIT).
+Licensed under the [MIT License](https://opensource.org/licenses/MIT).

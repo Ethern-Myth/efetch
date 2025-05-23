@@ -1,18 +1,11 @@
-﻿namespace efetch
+﻿namespace efetch.Providers
 {
     /// <summary>
     /// Provides logging functionality for HTTP requests and responses.
     /// </summary>
-    public class ConsoleLoggingProvider : ILoggingProvider
+    public class ConsoleLoggingProvider : IConsoleLoggingProvider
     {
-        // Private static instance variable
-        private static readonly ConsoleLoggingProvider _instance = new ConsoleLoggingProvider();
-
-        // Private constructor to prevent instantiation
-        private ConsoleLoggingProvider() { }
-
-        // Public static property to access the instance
-        public static ConsoleLoggingProvider Instance => _instance;
+        public ConsoleLoggingProvider() { }
 
         public void LogRequest(HttpRequestMessage request)
         {
