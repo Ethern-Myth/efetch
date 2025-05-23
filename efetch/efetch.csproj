@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <Title>Efetch</Title>
-    <Version>7.0.0</Version>
+    <Version>8.0.0</Version>
     <Authors>Ethern Myth</Authors>
     <Description>efetch  is a lightweight C# library for making HTTP requests with ease. It provides a simple interface for performing common HTTP operations such as GET, POST, PUT, PATCH, and DELETE. It also supports custom logging for requests, responses, and errors.</Description>
     <Copyright>Ethern Myth</Copyright>
