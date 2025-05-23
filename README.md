@@ -3,7 +3,6 @@
 **efetch** is a lightweight C# library for performing resilient HTTP requests with minimal boilerplate. It supports GET, POST, PUT, PATCH, DELETE operations, built-in retry policies via Polly, customizable headers, and optional structured logging.
 
 ![NuGet Version](https://img.shields.io/nuget/v/efetch)
-![GitHub Tag](https://img.shields.io/github/v/tag/ethern-myth/efetch)
 ![NuGet Downloads](https://img.shields.io/nuget/dt/efetch)
 
 ---
